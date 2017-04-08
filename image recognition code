@@ -1,0 +1,132 @@
+#include "cv.h"
+#include "highgui.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include <math.h>
+#include <float.h>
+#include <limits.h>
+#include <time.h>
+#include <ctype.h>
+ 
+#ifdef _EiC
+#define WIN32
+#endif
+ 
+static CvMemStorage* storage = 0;
+
+void detect_and_alert( IplImage* frame );
+void initial( IplImage* frame );
+
+double background, diff;
+
+
+int main( int argc, char** argv )
+{
+    CvCapture* capture = 0;
+    IplImage *frame, *frame_copy = 0;
+    IplImage *grey = 0;
+ 
+    storage = cvCreateMemStorage(0);
+ 
+    capture = cvCaptureFromCAM(1);
+ 
+    if( capture )
+    {
+		printf( "Initialize default background information\n" );
+        for(int s = 1; s <6 ; s++)
+        {
+            if( !cvGrabFrame( capture )) break;
+            frame = cvRetrieveFrame( capture );
+            if( !frame ) break;
+            if( !frame_copy )
+                frame_copy = cvCreateImage( cvSize(frame->width,frame->height),
+                                            IPL_DEPTH_8U, frame->nChannels );
+            if( frame->origin == IPL_ORIGIN_TL )
+                cvCopy( frame, frame_copy, 0 );
+            else
+                cvFlip( frame, frame_copy, 0 );
+			
+			// Initial default background Information
+            if( s == 5 )
+				initial(frame_copy);
+        }
+		
+		system("PAUSE");
+		printf( "Start alert system\n" );
+		for(;;)
+        {
+			// Setting up webcam
+            if( !cvGrabFrame( capture )) break;
+            frame = cvRetrieveFrame( capture );
+            if( !frame ) break;
+            if( !frame_copy )
+                frame_copy = cvCreateImage( cvSize(frame->width,frame->height),
+                                            IPL_DEPTH_8U, frame->nChannels );
+            if( frame->origin == IPL_ORIGIN_TL )
+                cvCopy( frame, frame_copy, 0 );
+            else
+                cvFlip( frame, frame_copy, 0 );
+			
+			detect_and_alert( frame_copy );
+			
+			//************************
+			//control
+			//************************
+			int r = cvWaitKey(10);
+			if( (char)r == 27 ) break;
+			switch( (char) r )
+			{
+				case 'r':
+					initial(frame_copy);
+				break;
+				default:
+					;
+			}	
+		}
+        cvReleaseImage( &frame_copy );
+        cvReleaseCapture( &capture );
+    }
+    
+    cvDestroyWindow("result");
+    system("PAUSE");
+    return 0;
+}
+
+void detect_and_alert( IplImage* frame )
+{
+    IplImage *grey;
+    
+    grey = cvCreateImage( cvGetSize(frame), IPL_DEPTH_8U, 1 );
+    cvCvtColor( frame, grey, CV_BGR2GRAY );
+    
+    double current;
+    current = cvSumPixels(grey)/(frame->width*frame->height);
+    
+    printf( "current value = %g\n", current );
+    
+	// Showing warning
+    diff = current > background ? current-background: background-current;
+    if ( diff > 6.9 )
+    {
+        CvFont Font1;
+        cvInitFont( &Font1,CV_FONT_HERSHEY_SIMPLEX,3,3,0.0,4, CV_AA );
+        cvPutText(frame,"Warning!!!",cvPoint(frame->width/5,frame->height/2),&Font1,CV_RGB(255,0,0));
+    }
+    
+    cvShowImage( "result", frame );
+    cvReleaseImage( &grey );
+}
+
+void initial( IplImage* frame )
+{
+    IplImage *grey = 0;
+	grey = cvCreateImage( cvGetSize(frame), IPL_DEPTH_8U, 1 );
+    cvCvtColor( frame, grey, CV_BGR2GRAY );
+	
+	background = cvSumPixels(grey)/(frame->width*frame->height);
+	printf( "\n background value = %g\n\n", background );
+	
+	cvReleaseImage( &grey );
+}
